@@ -1,0 +1,117 @@
+body {
+    background-color: black;
+    /* background-color: rgb(15, 15, 15); */
+    /* font-family: "ETBembo", serif; */
+    /* font-size: 12pt; */
+    font-family: sans-serif;
+    font-size: 10pt;
+    color: white;
+    -ms-overflow-style: none;  /* Hide scrollbar for IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+
+    /* Disable text selection */
+    -webkit-touch-callout: none; /* iOS Safari */
+    -webkit-user-select: none; /* Safari */
+     -khtml-user-select: none; /* Konqueror HTML */
+       -moz-user-select: none; /* Old versions of Firefox */
+        -ms-user-select: none; /* Internet Explorer/Edge */
+            user-select: none; /* Non-prefixed version, currently
+                                  supported by Chrome, Edge, Opera and Firefox */
+}
+/* For Chrome, Safari and Opera */
+::-webkit-scrollbar {
+  display: none;
+}
+
+.column {
+    float: left;
+  }
+  .left {
+    width: 33%;
+    /* height:100vh; */
+    overflow-y: scroll;
+    padding: 0.5%;
+    background-color: black;
+    background-color: rgb(10, 10, 10)
+  } 
+  .right {
+    width: 66%;
+  }
+  .row:after {
+    content: "";
+    display: table;
+    clear: both;
+  }
+
+form {
+  display: flex;
+}
+button {
+  background-color: rgb(15, 15, 15);
+  border: none;
+  color: white;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  margin: 4px 2px;
+  cursor: pointer;
+}
+
+input[type="text"] {
+  width: 80%;
+  flex: 1;
+  background-color: rgb(50, 50, 50);
+  border: none;
+  font-weight: bold;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit
+} 
+
+input[type="checkbox"] {
+  vertical-align: middle
+}
+
+span.textbox {
+  background-color: rgb(50, 50, 50);
+  line-height:20px;
+  height:20px;
+  padding:3px;
+  flex: 1;
+}
+
+span.textbox input {
+  border: 0px;
+}
+
+.sample{
+  pointer-events: none; /* NOTE: Samples can't take hover */
+}
+
+.node:hover{
+    stroke-width: 5;
+}
+
+.slider text {
+  font-family: "ETBembo", serif;
+  fill: white;
+  font-size: inherit;
+}
+
+div.tooltip {	
+  position: absolute;		
+  text-align: center;			
+  /* width: 60px;					 */
+  /* height: 28px;					 */
+  padding: 5px;				
+  font-size: 10pt;
+  /* font-weight: bold;		 */
+  background: rgb(50, 50, 50);	
+  border-radius: 5px;			
+  pointer-events: none;			
+}
+
+/* For brush */
+rect.selection {
+  fill: none;
+}

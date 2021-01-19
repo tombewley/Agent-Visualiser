@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D3 Server</title>
+  <link href="style.css" rel="stylesheet" type="text/css">
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+  <script src="https://unpkg.com/d3-simple-slider"></script>
+  <script src="https://cdn.rawgit.com/eligrey/canvas-toBlob.js/f1a01896135ab378aa5c0118eadd81da55e698d8/canvas-toBlob.js"></script>
+  <script src="https://cdn.rawgit.com/eligrey/FileSaver.js/e9d941381475b5df8b7d7691013401e171014e89/FileSaver.min.js"></script>  
+</head>
+
+<body>
+
+  <div class="row">
+    <div class="column left">
+      <!-- <h1>Updating scatter plot</h1> -->
+      <!-- <button id='run_python'>Run Python</button> -->
+      <!-- <br><br> -->
+      <p id="status_readout"><br></p>
+      <form>
+      <input type="text" id="samples_fname" value="whole-deluge-63_train">
+      <!-- <input type="text" id="samples_fname" value="SAC_10019_3d"> -->
+      <button type="button" id="load_samples" style="float: right;">Load Samples</button> 
+      </form>
+      <br>
+      <form>
+      <input type="text" id="model_fname" value="whole-deluge-63_train_S->S">
+      <!-- <input type="text" id="model_fname" value="model_3d"> -->
+      <button type="button" id="load_model" style="float: right;">Load Model</button>
+      </form>
+      <br>
+      <form>
+      <span class="textbox"><span style="color:hotpink">X: </span><input type="text" id="x_var_input"></span>
+      <span class="textbox"><span style="color:orange">Y: </span><input type="text" id="y_var_input"></span>
+      <span class="textbox"><span style="color:cadetblue">C: </span><input type="text" id="c_var_input"></span>
+      
+      <button type="button" id="plot">Plot</button>
+      </form>
+      <br>
+      <div>
+        Samples = <input type="text" style="width:60px;" id="random_subsample"> / <span id="filtered_size"></span> / <span id="total_size"></span>
+        <!-- | colours = <input type="checkbox" id="do_colour" checked=true> -->
+        | nodes = <input type="checkbox" id="show_nodes" checked=true>
+        | brush = <input type="checkbox" id='toggle_brush'> 
+      </div>
+      <button id='apply_brush_zoom'>Apply Brush/Zoom</button>
+      <button id='reset_lims'>Reset Lims</button>
+      <br>
+      <div id="parallel_coords_canvas" style="max-height:400px; overflow-y: scroll;"></div>
+      <br>
+      <form>
+        <p>Size:</p><div id="scatter_size_slider"></div>
+      </form>
+      <!-- <p>Opacity:</p><div id="scatter_opacity_slider"></div> -->
+      <form>
+      <input type="text" id="export_fname" value="Image.png">
+      <button type="button" id="export_image">Export Image</button>
+      </form>
+    </div>
+    <div class="column right">
+      <div id="canvas"></div>
+    </div>
+  </div>
+  
+   <!-- Import JavaScript stuff -->
+  <script src="./javascript/vis_funcs.js"></script>
+  <script src="./javascript/image_export.js"></script>
+  <script src="./javascript/page_setup.js"></script>
+
+</body>
+
+</html>

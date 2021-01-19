@@ -1,0 +1,13 @@
+{
+  "name": "d3-demo",
+  "version": "0.1.0",
+  "devDependencies": {
+    "express": "*"
+  },
+  "scripts": {
+    "serve": "node server.js"
+  },
+  "dependencies": {
+    "opn": "^6.0.0"
+  }
+}

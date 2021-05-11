@@ -41,6 +41,13 @@ function load_graph(){
                 nodes.push(node)
             }
         }  
+        edges = []
+        for (var i = 0; i < d.links.length; i++) {
+            edge = d.links[i]
+            if (edge.source != "I" & edge.target != "T") { // Ignore edges to "T".
+                edges.push(edge)
+            }
+        }
         if (lims == null){ // If no samples previously provided, take lims from nodes themselves.
             lims = {}
             var_names.forEach(var_name => {
@@ -330,6 +337,71 @@ function update_x_y_c(){
     svg_pc.select("#pc_handle_max_"+x_var).style("fill", x_var_colour)
 }
 
+function confidence_ellipse(node) {
+    // https://inkuzmin.github.io/covar-error-ellipse/
+    // https://cookierobotics.com/007/
+    // cov = [a b]
+    //       [b d]
+
+    p = 0.6827
+    s = -2 * Math.log(1-p)
+
+    // var n_std = 1
+
+    // var termA = ((a + d) / 2)
+    // var termB = Math.sqrt( Math.pow((a - d) / 2, 2) + Math.pow(b, 2) )
+    // var lambda1 = termA + termB
+    // var lambda2 = termA - termB
+
+    // // Apply scales here
+    // cx = x(node.mean[x_var]);
+    // cy = y(node.mean[y_var]);
+    // rx = n_std * Math.sqrt(lambda1);
+    // ry = n_std * Math.sqrt(lambda2);
+    // rot = -Math.atan2(h(y1), w(x1));
+
+    x_idx = var_names.indexOf(x_var); y_idx = var_names.indexOf(y_var)
+    a = node.cov[x_idx][x_idx]
+    b = node.cov[x_idx][y_idx]
+    d = node.cov[y_idx][y_idx]
+
+    var tmp = Math.sqrt((a - d) * (a - d) + 4 * b * b);
+    var V = [[-(tmp - a + d) / (2 * b), (tmp + a - d) / (2 * b)], [1, 1]];
+    var sqrtD = [Math.sqrt(s * (a + d - tmp) / 2), Math.sqrt(s * (a + d + tmp) / 2)];
+    var norm1 = Math.hypot(V[0][0], 1);
+    var norm2 = Math.hypot(V[0][1], 1);
+    V[0][0] /= norm1;
+    V[1][0] /= norm1;
+    V[0][1] /= norm2;
+    V[1][1] /= norm2;
+
+    var ndx = sqrtD[0] < sqrtD[1] ? 1 : 0;
+    var x1 = V[0][ndx] * sqrtD[ndx];
+    var y1 = V[1][ndx] * sqrtD[ndx];
+    var x2 = V[0][1 - ndx] * sqrtD[1 - ndx];
+    var y2 = V[1][1 - ndx] * sqrtD[1 - ndx];
+
+    // Apply scales here
+    var cx = x(node.mean[x_var]);
+    var cy = y(node.mean[y_var]);
+    var rx = Math.hypot(w(x1), h(y1));
+    var ry = Math.hypot(w(x2), h(y2));
+    var rot = -Math.atan2(h(y1), w(x1));
+
+    return {"node":node, "cx":cx, "cy":cy, "rx":rx, "ry":ry, "rot":rot}
+}
+
+function midpoint_arc(x1, y1, x2, y2) {
+    dx = (x2-x1)
+    dy = (y2-y1)
+    a = Math.atan2(dy, dx)    
+    r = (dx**2 + dy**2) ** 0.5; // Set arc radius = distance between endpoints
+    offset = r * (1 - (3**0.5)/2) // Basic trig
+    xm = ((x1 + x2) / 2) - offset * Math.sin(a);
+    ym = ((y1 + y2) / 2) + offset * Math.cos(a);
+    return `M ${x1} ${y1} A ${r} ${r} 0 0 0 ${xm} ${ym} A ${r} ${r} 0 0 0 ${x2} ${y2}`
+}
+
 function plot(){
     update_x_y_c() 
     // Recompute lims and redraw axes
@@ -364,7 +436,7 @@ function plot(){
     svg.select(".cbar")
         .transition(t).attr("opacity", () => {if (c_var != "") {return "1"} else {return "0"}})
         .call(d3.axisLeft(cbar)).select('.domain').attr('stroke-width', 0)
-    
+
     status_readout.textContent = `${x_var}, ${y_var}`
     rad = size_slider.value() // Radius from slider
     diam = 2 * rad
@@ -410,7 +482,41 @@ function plot(){
                 .transition(t).style("opacity", 0)
                 .remove();
         }
-        // Show node means
+
+        // Show edges as arcs.
+        edge_arcs = node_canvas.selectAll(".edge").data(edges) // , function (d) {return (d.source, d.target)})
+        edge_arcs.transition(t)
+            .attr("d", function(d){
+                x1 = x(nodes[d.source].mean[x_var])
+                y1 = y(nodes[d.source].mean[y_var])
+                x2 = x(nodes[d.target].mean[x_var])
+                y2 = y(nodes[d.target].mean[y_var])
+                return midpoint_arc(x1, y1, x2, y2)
+            })  
+        edge_arcs.enter()
+            .append("path")
+            .attr("class", "edge")
+            .attr("d", function(d){
+                x1 = x(nodes[d.source].mean[x_var])
+                y1 = y(nodes[d.source].mean[y_var])
+                x2 = x(nodes[d.target].mean[x_var])
+                y2 = y(nodes[d.target].mean[y_var])
+                return midpoint_arc(x1, y1, x2, y2)
+            })  
+            .attr("fill", "none")
+            .attr("stroke", "white")  
+            .attr("stroke-width", 2)  
+            .on("mouseover", function () {d3.select(this).transition().attr("opacity", 1).attr("stroke-width", 3)})
+            .on("mouseout", function () {d3.select(this).transition().attr("opacity", d => d.alpha).attr("stroke-width", 2)})
+            .attr("opacity", 0)
+            .transition(t)
+            .attr("opacity", d => d.alpha)
+            .attr("marker-mid", "url(#marker_arrow)")
+        edge_arcs.exit()
+            .transition(t).style("opacity", 0)
+            .remove();
+
+        // Show node means as scatter points.
         means = node_canvas.selectAll(".mean").data(nodes_filtered, function(d) {return d.id})
         rad_mu = 2*rad
         diam_mu = 2*diam
@@ -439,12 +545,18 @@ function plot(){
             })
             .attr("rx", rad_mu).attr("ry", rad_mu)
             .attr("fill", function(d){return sample_colour(c(d.mean[c_var]))})
+            .on("mouseover", function () {d3.select(this).transition().attr("width", 200).attr("height", 200)})
+            .on("mouseout", function () {d3.select(this).transition().attr("width", diam_mu).attr("height", diam_mu)})
+            .on("click", function(event, d) {
+                show_tooltip(`Node ${d.id}<br>${d.num_samples} samples`)
+            })
             .attr("opacity", 0)
             .transition(t)
             .style("opacity", 1);    
         means.exit()
             .transition(t).style("opacity", 0)
             .remove();
+    
     //     // Show node covariances as confidence ellipses
     //     el = nodes_filtered.map(node => {return confidence_ellipse(node)})
     //     covs = node_canvas.selectAll(".cov").data(el, function(d) {return d.node.id})
@@ -529,61 +641,6 @@ function run_python(){
         response.json().then((data) => {
         })
     })
-}
-
-
-function confidence_ellipse(node) {
-    // https://inkuzmin.github.io/covar-error-ellipse/
-    // https://cookierobotics.com/007/
-    // cov = [a b]
-    //       [b d]
-
-    p = 0.6827
-    s = -2 * Math.log(1-p)
-
-    // var n_std = 1
-
-    // var termA = ((a + d) / 2)
-    // var termB = Math.sqrt( Math.pow((a - d) / 2, 2) + Math.pow(b, 2) )
-    // var lambda1 = termA + termB
-    // var lambda2 = termA - termB
-
-    // // Apply scales here
-    // cx = x(node.mean[x_var]);
-    // cy = y(node.mean[y_var]);
-    // rx = n_std * Math.sqrt(lambda1);
-    // ry = n_std * Math.sqrt(lambda2);
-    // rot = -Math.atan2(h(y1), w(x1));
-
-    x_idx = var_names.indexOf(x_var); y_idx = var_names.indexOf(y_var)
-    a = node.cov[x_idx][x_idx]
-    b = node.cov[x_idx][y_idx]
-    d = node.cov[y_idx][y_idx]
-
-    var tmp = Math.sqrt((a - d) * (a - d) + 4 * b * b);
-    var V = [[-(tmp - a + d) / (2 * b), (tmp + a - d) / (2 * b)], [1, 1]];
-    var sqrtD = [Math.sqrt(s * (a + d - tmp) / 2), Math.sqrt(s * (a + d + tmp) / 2)];
-    var norm1 = Math.hypot(V[0][0], 1);
-    var norm2 = Math.hypot(V[0][1], 1);
-    V[0][0] /= norm1;
-    V[1][0] /= norm1;
-    V[0][1] /= norm2;
-    V[1][1] /= norm2;
-
-    var ndx = sqrtD[0] < sqrtD[1] ? 1 : 0;
-    var x1 = V[0][ndx] * sqrtD[ndx];
-    var y1 = V[1][ndx] * sqrtD[ndx];
-    var x2 = V[0][1 - ndx] * sqrtD[1 - ndx];
-    var y2 = V[1][1 - ndx] * sqrtD[1 - ndx];
-
-    // Apply scales here
-    var cx = x(node.mean[x_var]);
-    var cy = y(node.mean[y_var]);
-    var rx = Math.hypot(w(x1), h(y1));
-    var ry = Math.hypot(w(x2), h(y2));
-    var rot = -Math.atan2(h(y1), w(x1));
-
-    return {"node":node, "cx":cx, "cy":cy, "rx":rx, "ry":ry, "rot":rot}
 }
 
 // function shorter_rot(rot_last, rot) {

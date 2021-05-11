@@ -15,6 +15,7 @@ var animation_duration = 1000
 var var_names = null
 var samples = null
 var nodes = null
+var edges = null
 var lims = null
 var samples_filtered = null
 var nodes_filtered = null
@@ -64,6 +65,27 @@ var w = d3.scaleLinear().range([0, width])
 var h = d3.scaleLinear().range([0, height])
 var c = d3.scaleLinear().range([0, 1])
 var cbar = d3.scaleLinear().range([cbar_height, 0])
+
+// Define arrow head
+var arrow_heads = [
+	{name: "arrow", path: "M 0,0 m -5,-5 L 5,0 L -5,5 Z", viewbox: "-5 -5 10 10"}
+]
+var defs = svg.append("svg:defs")
+var marker = defs.selectAll("marker")
+    .data(arrow_heads)
+    .enter()
+    .append('svg:marker')
+      .attr('id', function(d){ return 'marker_' + d.name})
+      .attr('markerHeight', 5)
+      .attr('markerWidth', 5)
+      .attr('markerUnits', 'strokeWidth')
+      .attr('orient', 'auto')
+      .attr('refX', 0)
+      .attr('refY', 0)
+      .attr('viewBox', function(d){ return d.viewbox })
+      .append('svg:path')
+        .attr('d', function(d){ return d.path })
+        .attr('fill', function(d,i) {return "#fff"});
 
 // Create axes
 svg.append("g")

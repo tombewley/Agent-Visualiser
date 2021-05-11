@@ -6,9 +6,18 @@
     <script src="//unpkg.com/three"></script>    
     <script src="//unpkg.com/three-spritetext"></script>
     <script src="//unpkg.com/3d-force-graph"></script>
+    <link rel="stylesheet" href="css/3d_graph.css">
 </head>
 
-<body style="margin: 0">
+<body>
+    <div class="other_shapes"></div>
     <div id="graph_canvas"></div>
+    <div class="dimensions-selector">
+        Dimensions:
+        <input type="radio" name="num-dimensions" onChange="toggle_dimensions(1)"> 1D
+        <input type="radio" name="num-dimensions" onChange="toggle_dimensions(2)"> 2D
+        <input type="radio" name="num-dimensions" onChange="toggle_dimensions(3)" checked> 3D
+    </div>
+    
     <script src="javascript/3d_graph.js"></script>
-</body>
+</body> 

@@ -1,7 +1,7 @@
 function load_samples(){ 
     f = document.getElementById("samples_fname").value
     status_readout.textContent = `Loading ${f}...`
-    d3.csv(`data/${f}.csv`).then((d) => {
+    d3.csv(`${f}.csv`).then((d) => {
         samples = d
         for (var i = 0; i < samples.length; i++) {samples[i].__key = i} // Add __key column for object constancy
         var_names = Object.keys(samples[0]).slice(0, -1) // Don't include __key in list of var_names
@@ -12,9 +12,9 @@ function load_samples(){
         // Defaults
         random_subsample_size = 5000 // Number(samples_filtered.length)
         document.getElementById("random_subsample").value = random_subsample_size
-        document.getElementById("x_var_input").value = var_names[0]
-        document.getElementById("y_var_input").value = var_names[1]
-        document.getElementById("c_var_input").value = var_names[2]
+        // document.getElementById("x_var_input").value = var_names[0]
+        // document.getElementById("y_var_input").value = var_names[1]
+        // document.getElementById("c_var_input").value = var_names[2]
         status_readout.textContent += ` (${samples.length}, ${var_names.length}) dataset loaded.`  
         total_size_readout.textContent = samples.length
         make_pc_plot()
@@ -22,24 +22,37 @@ function load_samples(){
     })
 }
 
-function load_model(){
-    f = document.getElementById("model_fname").value
+function load_graph(){
+    f = document.getElementById("graph_fname").value
     status_readout.textContent = `Loading ${f}...`
-    d3.json(`data/${f}.json`).then((d) => {
-        if (JSON.stringify(var_names) != JSON.stringify(d.var_names)){alert("var_names do not match!"); return}
+    d3.json(`${f}.json`).then((d) => {
+        if (var_names != null){ if (JSON.stringify(var_names) != JSON.stringify(d.var_names)){alert("var_names do not match!"); return}}
+        else { var_names = d.var_names }
         nodes = []  
         for (var i = 0; i < d.nodes.length; i++) {
             node = d.nodes[i]
-            node.__key = i; // Add __key column for object constancy
-            (["bb_max", "bb_min", "mean"]).forEach(function (attr){ 
-                // Convert from Array to Object, using var_names as keys
-                kv = [var_names, node[attr]]
-                node[attr] = Object.fromEntries(kv[0].map((col, i) => kv.map(row => row[i])))
+
+            if (node.id != "I" & node.id != "T") { // Ignore "I" and "T".
+                (["bb_max", "bb_min", "mean"]).forEach(function (attr){ 
+                    // Convert from Array to Object, using var_names as keys
+                    kv = [var_names, node[attr]]
+                    node[attr] = Object.fromEntries(kv[0].map((col, i) => kv.map(row => row[i])))
+                })
+                nodes.push(node)
+            }
+        }  
+        if (lims == null){ // If no samples previously provided, take lims from nodes themselves.
+            lims = {}
+            var_names.forEach(var_name => {
+                lims[var_name] = [Math.min(...nodes.map(node => node.bb_max[var_name][0])), Math.max(...nodes.map(node => node.bb_max[var_name][1]))]
             })
-            nodes.push(node)
-        } 
-        nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb_min, lims_filtered, true)})
-        status_readout.textContent += ` ${nodes.length}-node model loaded.`;  
+            make_pc_plot()
+            bb_or_zoom_to_lims(lims)
+        }        
+        else {
+            nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb_min, lims_filtered, true)})
+        }
+        status_readout.textContent += ` ${nodes.length}-node graph loaded.`;  
     })
 }
 
@@ -57,7 +70,14 @@ function make_pc_plot(){
         .attr("dx", "-0.75em")
         .attr("dy", "0.55em")
         .attr("y", function(d, i){return i * spacing})
-        .text(function(d){return d});
+        .text(function(d){return d})
+        .on("click",function(event, d){
+            last_clicked_var_name = d
+            xyc_selector
+                .style("left", (event.pageX - 30) + "px")
+                .style("top", (event.pageY - 28) + "px")
+                .transition().style("opacity", 1)
+        })
     label_bbox = svg_pc.node().getBBox();
     svg_pc.attr("height", label_bbox.height+8); svg_pc_outer.attr("height", label_bbox.height+8); // Resize parent to content
     
@@ -103,16 +123,18 @@ function make_pc_plot(){
             .attr("r", handle_size)
             .attr("fill", "white")
             .call(d3.drag()
-                .on("start", function (event) {dragging_handle = true}) 
+                .on("start", function () {
+                    lim_input_div.style("opacity", 0)
+                }) 
                 .on("drag", function (event) {
+                    dragging_handle = true
                     this_d3 = d3.select(this)
-                    this_idx = this_d3.attr("data-min-or-max")
                     this_var_num = this_d3.attr("data-var-num")
-                    if (this_idx == 0) {x_constrained = Math.min(Math.max(event.x, pc_handle_range[0]), pc_handle_pos[1][this_var_num][0])} // Constrain motion within limits
-                    else               {x_constrained = Math.min(Math.max(event.x, pc_handle_pos[0][this_var_num][0]), pc_handle_range[1])}
+                    if (idx == 0) {x_constrained = Math.min(Math.max(event.x, pc_handle_range[0]), pc_handle_pos[1][this_var_num][0])} // Constrain motion within limits
+                    else          {x_constrained = Math.min(Math.max(event.x, pc_handle_pos[0][this_var_num][0]), pc_handle_range[1])}
                     this_d3.attr("cx", x_constrained) 
-                    pc_handle_pos[this_idx][this_var_num][0] = x_constrained
-                    pc_handle_path[this_idx].attr("d", d3.line()(pc_handle_pos[this_idx])) 
+                    pc_handle_pos[idx][this_var_num][0] = x_constrained
+                    pc_handle_path[idx].attr("d", d3.line()(pc_handle_pos[idx])) 
                     lim_new = pc_scales[this_var_num].invert(x_constrained)
                     // Keep tooltip updated
                     tooltip
@@ -120,51 +142,72 @@ function make_pc_plot(){
                         .style("left", (event.sourceEvent.pageX - 30) + "px")
                 })
                 .on("end", function (event) {
-                    dragging_handle = false
-                    this_d3 = d3.select(this)
-                    this_idx = this_d3.attr("data-min-or-max")
-                    this_var_num = this_d3.attr("data-var-num")
-                    lim_new = pc_scales[this_var_num].invert(pc_handle_pos[this_idx][this_var_num][0])
-                    // Update actual lims on variable
-                    lims_filtered[var_names[this_var_num]][this_idx] = lim_new
-                    // Filter dataset
-                    samples_filtered = samples.filter(function (x){return x_in_l(x, lims_filtered, false)})
-                    if (nodes != null) {nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb_min, lims_filtered, true)})}
-                    filtered_size_readout.textContent = samples_filtered.length
-                    samples_filtered_subsampled = random_subsample(samples_filtered, random_subsample_size)
-                    // Hide tooltip
-                    tooltip.transition().style("opacity", 0);
+                    if (dragging_handle) {
+                        dragging_handle = false
+                        this_d3 = d3.select(this)
+                        this_var_num = this_d3.attr("data-var-num")
+                        lim_new = pc_scales[this_var_num].invert(pc_handle_pos[idx][this_var_num][0])
+                        // Update actual lims on variable
+                        lims_filtered[var_names[this_var_num]][idx] = lim_new
+                        // Filter dataset
+                        if (samples != null) {
+                            samples_filtered = samples.filter(function (x){return x_in_l(x, lims_filtered, false)})
+                            filtered_size_readout.textContent = samples_filtered.length
+                            samples_filtered_subsampled = random_subsample(samples_filtered, random_subsample_size)
+                        }
+                        if (nodes != null) {nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb_min, lims_filtered, true)})}
+                        // Hide tooltip
+                        tooltip.transition().style("opacity", 0);
+                    }
                 })
             )
-            .on("click", function(event) {
+            .on("click", function(event, d) {
                 if (event.defaultPrevented) return; // Triggers if dragged
+                tooltip.style("opacity", 0)
+                last_clicked_var_name = [d, idx]
+                lim_input_div
+                    .style("left", (event.pageX - 30) + "px")
+                    .style("top", (event.pageY - 28) + "px")
+                    .transition().style("opacity", 1)
+                lim_input.value = lims_filtered[d][idx]
             }) 
-            .on("dblclick", function(event) {
+            .on("dblclick", function(event, d) {
+                lim_input_div.transition().delay(100).style("opacity", 0)
                 this_d3 = d3.select(this)                
-                this_idx = this_d3.attr("data-min-or-max")
                 this_var_num = this_d3.attr("data-var-num")
-                this_var_name = var_names[this_var_num]
-                // Handle case where both handles are stuck at the max end and can't access the min one
-                if (this_idx == 1 && pc_handle_pos[0][this_var_num][0] == pc_handle_range[1]) {
-                    d3.select(`#pc_handle_min_${this_var_name}`).dispatch("dblclick")
+                
+                if (idx == 1 && pc_handle_pos[0][this_var_num][0] == pc_handle_range[1]) {
+                    // Case where both handles are stuck at the max end and can't access the min one
+                    d3.select(`#pc_handle_min_${d}`).dispatch("dblclick")
                 }
                 else {
-                    pc_handle_pos[this_idx][this_var_num][0] = pc_handle_range[this_idx]
-                    this_d3.transition().attr("cx", pc_handle_range[this_idx])
-                    pc_handle_path[this_idx].transition().attr("d", d3.line()(pc_handle_pos[this_idx]))
-                    // Reset actual lims on variable
-                    lims_filtered[this_var_name][this_idx] = lims[this_var_name][this_idx]
+                    if (event.detail != 2) {
+                        // Case where a target value has been passed into the event (by lim_input)
+                        if (idx == 0) {lims_filtered[d][idx] = Math.max(Number(event.detail), lims[d][idx])} // Constrain within limits
+                        else {lims_filtered[d][idx] = Math.min(Number(event.detail), lims[d][idx])}    
+                        pc_handle_pos[idx][this_var_num][0] = pc_scales[this_var_num](lims_filtered[d][idx])
+                        this_d3.transition().attr("cx", pc_handle_pos[idx][this_var_num][0])
+                        pc_handle_path[idx].transition().attr("d", d3.line()(pc_handle_pos[idx]))
+                    }
+                    else {
+                        // Case where an actual double click has been made
+                        lims_filtered[d][idx] = lims[d][idx]
+                        pc_handle_pos[idx][this_var_num][0] = pc_handle_range[idx]
+                        this_d3.transition().attr("cx", pc_handle_range[idx])
+                        pc_handle_path[idx].transition().attr("d", d3.line()(pc_handle_pos[idx]))
+                    }                   
                     // Filter dataset
-                    samples_filtered = samples.filter(function (x){return x_in_l(x, lims_filtered, false)})
+                    if (samples != null) {
+                        samples_filtered = samples.filter(function (x){return x_in_l(x, lims_filtered, false)})
+                        filtered_size_readout.textContent = samples_filtered.length
+                        samples_filtered_subsampled = random_subsample(samples_filtered, random_subsample_size)
+                    }
                     if (nodes != null) {nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb_min, lims_filtered, true)})}
-                    filtered_size_readout.textContent = samples_filtered.length
-                    samples_filtered_subsampled = random_subsample(samples_filtered, random_subsample_size);
                 }
             })        
             .on("mouseover",function(event){
                 if (dragging_handle == false) {
                     this_d3 = d3.select(this)       
-                    tooltip.transition().style("opacity", 1)
                     show_tooltip(Number(lims_filtered[var_names[this_d3.attr("data-var-num")]][this_d3.attr("data-min-or-max")].toPrecision(3)))
                 }
             })
@@ -175,24 +218,23 @@ function make_pc_plot(){
 }  
 
 function show_tooltip(html){
-    tooltip.transition().style("opacity", 1)
-    tooltip
-        .html(html)
+    tooltip.html(html)
         .style("left", (event.pageX - 30) + "px")
-        .style("top", (event.pageY - 28) + "px");
+        .style("top", (event.pageY - 28) + "px")
+        .transition().style("opacity", 1)
 }
 
 function bb_or_zoom_to_lims(bb){  
-    if (bb !== null) { 
+    if (bb != null) { 
         // If bb provided, modify lims along all variables
         lims_filtered = JSON.parse(JSON.stringify(bb))
         var_names.forEach(function(var_name){lims_to_handles(var_name)}) 
         if (bb == lims){
-            samples_filtered = samples.slice() // Entire dataset
+            if (samples != null) {samples_filtered = samples.slice()} // Entire dataset
             if (nodes != null) {nodes_filtered = nodes.slice()}
         } 
         else {
-            samples_filtered = samples.filter(function (x){return x_in_l(x, lims_filtered, false)})
+            if (samples != null) {samples_filtered = samples.filter(function (x){return x_in_l(x, lims_filtered, false)})}
             if (nodes != null) {nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb_min, lims_filtered, true)})}
         }
     } 
@@ -202,11 +244,13 @@ function bb_or_zoom_to_lims(bb){
         lims_filtered[x_var] = x_lims; lims_filtered[y_var] = y_lims;
         [x_var, y_var].forEach(function(var_name){lims_to_handles(var_name)}) 
         // Only need to filter the current subset, because zooming can only ever reduce.
-        samples_filtered = samples_filtered.filter(function (x){return x_in_l(x, lims_filtered, false)})
+        if (samples != null) {samples_filtered = samples_filtered.filter(function (x){return x_in_l(x, lims_filtered, false)})}
         if (nodes != null) {nodes_filtered = nodes_filtered.filter(function (x){return x_in_l(x.bb_min, lims_filtered, true)})}
     }    
-    filtered_size_readout.textContent = samples_filtered.length
-    samples_filtered_subsampled = random_subsample(samples_filtered, random_subsample_size)
+    if (samples != null) {
+        filtered_size_readout.textContent = samples_filtered.length
+        samples_filtered_subsampled = random_subsample(samples_filtered, random_subsample_size)
+    }
 }
 
 function lims_to_handles(var_name) {
@@ -274,15 +318,16 @@ function update_x_y_c(){
     svg_pc.selectAll(".var_label").style("fill", "white")
     svg_pc.selectAll(".pc_handle_min").style("fill", "white")
     svg_pc.selectAll(".pc_handle_max").style("fill", "white")
-    svg_pc.select("#var_label_"+x_var).style("fill", x_var_colour)
-    svg_pc.select("#pc_handle_min_"+x_var).style("fill", x_var_colour)
-    svg_pc.select("#pc_handle_max_"+x_var).style("fill", x_var_colour)
-    svg_pc.select("#var_label_"+y_var).style("fill", y_var_colour)
-    svg_pc.select("#pc_handle_min_"+y_var).style("fill", y_var_colour)
-    svg_pc.select("#pc_handle_max_"+y_var).style("fill", y_var_colour)
+    // Order c -> y -> x so x gets top priority in case of duplication
     svg_pc.select("#var_label_"+c_var).style("fill", c_var_colour)
     svg_pc.select("#pc_handle_min_"+c_var).style("fill", c_var_colour)
     svg_pc.select("#pc_handle_max_"+c_var).style("fill", c_var_colour)
+    svg_pc.select("#var_label_"+y_var).style("fill", y_var_colour)
+    svg_pc.select("#pc_handle_min_"+y_var).style("fill", y_var_colour)
+    svg_pc.select("#pc_handle_max_"+y_var).style("fill", y_var_colour)
+    svg_pc.select("#var_label_"+x_var).style("fill", x_var_colour)
+    svg_pc.select("#pc_handle_min_"+x_var).style("fill", x_var_colour)
+    svg_pc.select("#pc_handle_max_"+x_var).style("fill", x_var_colour)
 }
 
 function plot(){
@@ -306,7 +351,8 @@ function plot(){
         c.domain(lims_filtered[c_var])
         cbar.domain(lims_filtered[c_var])
         function sample_colour(v){return cmap(v)} // https://github.com/d3/d3-scale-chromatic
-        node_colour = sample_colour
+        if (document.getElementById("colour_nodes").checked == false) {function node_colour(){return "none"}}
+        else {node_colour = sample_colour}
     }
     var t = svg.transition().duration(animation_duration)
     svg.select(".x_axis").transition(t).attr("opacity", "1").call(d3.axisBottom(x))
@@ -319,9 +365,14 @@ function plot(){
         .transition(t).attr("opacity", () => {if (c_var != "") {return "1"} else {return "0"}})
         .call(d3.axisLeft(cbar)).select('.domain').attr('stroke-width', 0)
     
+    status_readout.textContent = `${x_var}, ${y_var}`
+    rad = size_slider.value() // Radius from slider
+    diam = 2 * rad
+
     // Show node projections as rectangles
     if (nodes != null) {
-        rects = node_canvas.selectAll(".node").data(nodes_filtered, function(d) {return d.__key})  
+        status_readout.textContent += ` | ${nodes_filtered.length} nodes`
+        rects = node_canvas.selectAll(".node").data(nodes_filtered, function(d) {return d.id})  
         if (document.getElementById("show_nodes").checked == false) {rects.transition(t).style("opacity", 0).remove()}
         else {
             w.domain([0, x_lims[1]-x_lims[0]]); h.domain([0, y_lims[1]-y_lims[0]])
@@ -349,9 +400,9 @@ function plot(){
                 .attr("fill", function(d){return node_colour(c(d.mean[c_var]))})
                 .attr("stroke", "white")
                 .on("click", function(event, d) {
-                    show_tooltip(`Node ${d.__key}<br>${d.num_samples} samples`)
+                    show_tooltip(`Node ${d.id}<br>${d.num_samples} samples`)
                 })
-                .on("dblclick", function(event, d){bb_or_zoom_to_lims(d.bb_min); plot()}) // Click to adopt lims
+                .on("dblclick", function(event, d){bb_or_zoom_to_lims(d.bb_min); tooltip.transition().style("opacity", 0); plot()}) // Click to adopt lims
                 .attr("opacity", 0)
                 .transition(t)
                 .style("opacity", 1);
@@ -359,43 +410,109 @@ function plot(){
                 .transition(t).style("opacity", 0)
                 .remove();
         }
+        // Show node means
+        means = node_canvas.selectAll(".mean").data(nodes_filtered, function(d) {return d.id})
+        rad_mu = 2*rad
+        diam_mu = 2*diam
+        means.transition(t)
+            .attr("x", function(d){return x(d.mean[x_var]) - rad_mu})
+            .attr("y", function(d){
+                if (y_var != "") {return y(d.mean[y_var]) - rad_mu}
+                else {return 0}
+            })
+            .attr("width", diam_mu)
+            .attr("height", function(){
+                if (y_var != "") {return diam_mu}
+                else {return height}
+            })
+            .attr("rx", rad_mu).attr("ry", rad_mu)
+            .attr("fill", function(d){return sample_colour(c(d.mean[c_var]))})
+        means.enter()
+            .append("rect")
+            .attr("class", "mean")
+            .attr("x", function(d){return x(d.mean[x_var]) - rad_mu})
+            .attr("y", function(d){if (y_var != "") {return y(d.mean[y_var]) - rad_mu}})
+            .attr("width", diam_mu)
+            .attr("height", function(){
+                if (y_var != "") {return diam_mu}
+                else {return height}
+            })
+            .attr("rx", rad_mu).attr("ry", rad_mu)
+            .attr("fill", function(d){return sample_colour(c(d.mean[c_var]))})
+            .attr("opacity", 0)
+            .transition(t)
+            .style("opacity", 1);    
+        means.exit()
+            .transition(t).style("opacity", 0)
+            .remove();
+    //     // Show node covariances as confidence ellipses
+    //     el = nodes_filtered.map(node => {return confidence_ellipse(node)})
+    //     covs = node_canvas.selectAll(".cov").data(el, function(d) {return d.node.id})
+    //     covs.transition(t)
+    //         .attr("cx", d => {return d.cx})
+    //         .attr("cy", d => {return d.cy})
+    //         .attr("rx", d => {return d.rx})
+    //         .attr("ry", d => {return d.ry})
+    //         .style("transform", d => {return `rotate(${d.rot}rad)`})
+    //         .style("transform-origin", d => {return `${d.cx}px ${d.cy}px`});
+    //     covs.enter()
+    //         .append("ellipse")
+    //         .attr("class", "cov")
+    //         .attr("stroke", "white")
+    //         .attr("fill", "none")
+    //         .attr("cx", d => {return d.cx})
+    //         .attr("cy", d => {return d.cy})
+    //         .attr("rx", d => {return d.rx})
+    //         .attr("ry", d => {return d.ry})
+    //         .style("transform", d => {return `rotate(${d.rot}rad)`})
+    //         .style("transform-origin", d => {return `${d.cx}px ${d.cy}px`})
+    //         .on("click", function(event, d) {
+    //             show_tooltip(`Node ${d.node.id}<br>${d.node.num_samples} samples`)
+    //         })
+    //         .on("dblclick", function(event, d){bb_or_zoom_to_lims(d.node.bb_min); tooltip.transition().style("opacity", 0); plot()}) // Click to adopt lims
+    //         .attr("opacity", 0)
+    //         .transition(t)
+    //         .style("opacity", 1);   
+    //     covs.exit()
+    //         .transition(t).style("opacity", 0)
+    //         .remove();
     }
     // Show samples as scatter points - NOTE: creating these as rectangles allows them to be morphed in shape
-    status_readout.textContent = `Showing ${samples_filtered_subsampled.length} samples in (${x_var}, ${y_var}).`
-    rad = size_slider.value() // Radius from slider
-    diam = 2 * rad
-    points = sample_canvas.selectAll(".sample").data(samples_filtered_subsampled, function(d) {return d.__key})
-    points.transition(t)
-        .attr("x", function(d){return x(d[x_var]) - rad})
-        .attr("y", function(d){
-            if (y_var != "") {return y(d[y_var]) - rad}
-            else {return 0}
-        })
-        .attr("width", diam)
-        .attr("height", function(){
-            if (y_var != "") {return diam}
-            else {return height}
-        })
-        .attr("rx", rad).attr("ry", rad)
-        .attr("fill", function(d){return sample_colour(c(d[c_var]))});
-    points.enter()
-        .append("rect")
-        .attr("class", "sample")
-        .attr("x", function(d){return x(d[x_var]) - rad})
-        .attr("y", function(d){if (y_var != "") {return y(d[y_var]) - rad}})
-        .attr("width", diam)
-        .attr("height", function(){
-            if (y_var != "") {return diam}
-            else {return height}
-        })
-        .attr("rx", rad).attr("ry", rad)
-        .attr("fill", function(d){return sample_colour(c(d[c_var]))})
-        .attr("opacity", 0)
-        .transition(t)
-        .style("opacity", 1);    
-    points.exit()
-        .transition(t).style("opacity", 0)
-        .remove();
+    if (samples != null) {
+        status_readout.textContent += ` | ${samples_filtered_subsampled.length} samples`
+        points = sample_canvas.selectAll(".sample").data(samples_filtered_subsampled, function(d) {return d.__key})
+        points.transition(t)
+            .attr("x", function(d){return x(d[x_var]) - rad})
+            .attr("y", function(d){
+                if (y_var != "") {return y(d[y_var]) - rad}
+                else {return 0}
+            })
+            .attr("width", diam)
+            .attr("height", function(){
+                if (y_var != "") {return diam}
+                else {return height}
+            })
+            .attr("rx", rad).attr("ry", rad)
+            .attr("fill", function(d){return sample_colour(c(d[c_var]))});
+        points.enter()
+            .append("rect")
+            .attr("class", "sample")
+            .attr("x", function(d){return x(d[x_var]) - rad})
+            .attr("y", function(d){if (y_var != "") {return y(d[y_var]) - rad}})
+            .attr("width", diam)
+            .attr("height", function(){
+                if (y_var != "") {return diam}
+                else {return height}
+            })
+            .attr("rx", rad).attr("ry", rad)
+            .attr("fill", function(d){return sample_colour(c(d[c_var]))})
+            .attr("opacity", 0)
+            .transition(t)
+            .style("opacity", 1);    
+        points.exit()
+            .transition(t).style("opacity", 0)
+            .remove();
+    }
 }    
 
 function run_python(){
@@ -413,3 +530,71 @@ function run_python(){
         })
     })
 }
+
+
+function confidence_ellipse(node) {
+    // https://inkuzmin.github.io/covar-error-ellipse/
+    // https://cookierobotics.com/007/
+    // cov = [a b]
+    //       [b d]
+
+    p = 0.6827
+    s = -2 * Math.log(1-p)
+
+    // var n_std = 1
+
+    // var termA = ((a + d) / 2)
+    // var termB = Math.sqrt( Math.pow((a - d) / 2, 2) + Math.pow(b, 2) )
+    // var lambda1 = termA + termB
+    // var lambda2 = termA - termB
+
+    // // Apply scales here
+    // cx = x(node.mean[x_var]);
+    // cy = y(node.mean[y_var]);
+    // rx = n_std * Math.sqrt(lambda1);
+    // ry = n_std * Math.sqrt(lambda2);
+    // rot = -Math.atan2(h(y1), w(x1));
+
+    x_idx = var_names.indexOf(x_var); y_idx = var_names.indexOf(y_var)
+    a = node.cov[x_idx][x_idx]
+    b = node.cov[x_idx][y_idx]
+    d = node.cov[y_idx][y_idx]
+
+    var tmp = Math.sqrt((a - d) * (a - d) + 4 * b * b);
+    var V = [[-(tmp - a + d) / (2 * b), (tmp + a - d) / (2 * b)], [1, 1]];
+    var sqrtD = [Math.sqrt(s * (a + d - tmp) / 2), Math.sqrt(s * (a + d + tmp) / 2)];
+    var norm1 = Math.hypot(V[0][0], 1);
+    var norm2 = Math.hypot(V[0][1], 1);
+    V[0][0] /= norm1;
+    V[1][0] /= norm1;
+    V[0][1] /= norm2;
+    V[1][1] /= norm2;
+
+    var ndx = sqrtD[0] < sqrtD[1] ? 1 : 0;
+    var x1 = V[0][ndx] * sqrtD[ndx];
+    var y1 = V[1][ndx] * sqrtD[ndx];
+    var x2 = V[0][1 - ndx] * sqrtD[1 - ndx];
+    var y2 = V[1][1 - ndx] * sqrtD[1 - ndx];
+
+    // Apply scales here
+    var cx = x(node.mean[x_var]);
+    var cy = y(node.mean[y_var]);
+    var rx = Math.hypot(w(x1), h(y1));
+    var ry = Math.hypot(w(x2), h(y2));
+    var rot = -Math.atan2(h(y1), w(x1));
+
+    return {"node":node, "cx":cx, "cy":cy, "rx":rx, "ry":ry, "rot":rot}
+}
+
+// function shorter_rot(rot_last, rot) {
+//     options = [rot, rot+Math.PI, rot-Math.PI]
+//     deltas = [Math.abs(rot-rot_last), Math.abs(rot+Math.PI-rot_last), Math.abs(rot-Math.PI-rot_last)]
+//     return options[deltas.indexOf(Math.min(...deltas))]
+
+
+//     clockwise = (rot-rot_last)%twopi
+//     counterClockwise = (rot-rot_last-twopi)%twopi
+//     return Math.abs(clockwise) < Math.abs(counterClockwise) ?
+//            rot + clockwise :
+//            rot + counterClockwise
+// }

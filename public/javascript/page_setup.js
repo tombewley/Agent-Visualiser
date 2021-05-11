@@ -28,6 +28,7 @@ var c_var = null
 var pc_handle_pos = [[],[]]
 var pc_handle_path = [null, null]
 var pc_scales = []
+var last_clicked_var_name = null
 var brush_selection = null
 
 // Names of DOM elements
@@ -111,14 +112,30 @@ var brush = d3.brush()
     .on("end", function () {brush_selection = d3.brushSelection(this)})
 var brush_area = null // Don't create by default
 
-// Create tooltip div
+// Create general-purpose tooltip
 var tooltip = d3.select("body").append("div").attr("class", "tooltip").style("opacity", 0)
 cbar_group.on("click", function() {tooltip.transition().style("opacity", 0)}) // Click to hide
+
+// Create xyc selector tooltip
+var xyc_selector = d3.select(".xyc_selector").style("opacity", 0)
+xyc_selector.on("click",function(){ // Click to hide 
+    d3.select(this)
+        .transition().style("opacity", 0)
+        .transition().duration(0).style("left", "0px").style("top", "0px")
+});  
+
+// Create lim input tooltip
+var lim_input_div = d3.select(".lim_input_div").style("opacity", 0)
+var lim_input = document.getElementById("lim_input")
+d3.select("#lim_input").on("blur", ()=>{
+    d3.select(`#pc_handle_${["min","max"][last_clicked_var_name[1]]}_${last_clicked_var_name[0]}`)
+        .dispatch("dblclick", {detail: lim_input.value}) // Pass new value into "dblclick" as argument
+})
 
 // ==================================================================================
 // PARALLEL COORDINATES PLOT
 
-// Append the svg object to the canvas div, and create inner group to leave some margin
+// Append the svg object to the canvas div, and create isnner group to leave some margin
 var svg_pc_outer = d3.select("#parallel_coords_canvas").append("svg").attr("width", "100%")
 var pc_width = svg_pc_outer.node().getBoundingClientRect().width - 20
 var svg_pc = svg_pc_outer.append("g").attr("transform", "translate(" + 10 + "," + 10 + ")")
@@ -128,7 +145,7 @@ var svg_pc = svg_pc_outer.append("g").attr("transform", "translate(" + 10 + "," 
 
 // Button functionality
 d3.select("#load_samples").on("click", load_samples);
-d3.select("#load_model").on("click", load_model);
+d3.select("#load_graph").on("click", load_graph);
 d3.select("#plot").on("click", plot);
 d3.select("#toggle_brush").on("click", function(){
     btn = d3.select("#toggle_brush")
@@ -157,6 +174,9 @@ d3.select('#export_image').on('click', function(){
     svg.select(".x_label").attr("fill", x_var_colour)
     svg.select(".y_label").attr("fill", y_var_colour)
 });
+d3.select("#to_x").on("click", function(){document.getElementById("x_var_input").value = last_clicked_var_name; update_x_y_c()});
+d3.select("#to_y").on("click", function(){document.getElementById("y_var_input").value = last_clicked_var_name; update_x_y_c()});
+d3.select("#to_c").on("click", function(){document.getElementById("c_var_input").value = last_clicked_var_name; update_x_y_c()});
 
 // Slider functionality
 var size_slider = d3
@@ -179,7 +199,7 @@ var opacity_slider = d3
     .ticks(0)
     .tickFormat(d3.format('.2'))
     .default(1)
-    .on("onchange", o => {console.log(o); svg.selectAll(".sample").attr("opacity", o)});
+    .on("onchange", o => {svg.selectAll(".sample").attr("opacity", o)});
 var s2 = d3
     .select("#scatter_opacity_slider")
     .append("svg")
@@ -193,7 +213,7 @@ function keypress(event) {
     // console.log(event.keyCode)
     switch (event.keyCode) {
         case 59: load_samples(); break; // ;
-        case 39: load_model(); break; // '
+        case 39: load_graph(); break; // '
         case 13: plot(); break; // Enter
         case 91:
             x_in = document.getElementById("x_var_input"); x_var = x_in.value

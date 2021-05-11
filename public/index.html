@@ -19,24 +19,22 @@
       <!-- <h1>Updating scatter plot</h1> -->
       <!-- <button id='run_python'>Run Python</button> -->
       <!-- <br><br> -->
+      <a href="/public/2d_graph.html">Graph</a>
       <p id="status_readout"><br></p>
       <form>
-      <input type="text" id="samples_fname" value="whole-deluge-63_train">
-      <!-- <input type="text" id="samples_fname" value="SAC_10019_3d"> -->
+      <input type="text" id="samples_fname" value="data/youthful-surf-35_train">
       <button type="button" id="load_samples" style="float: right;">Load Samples</button> 
       </form>
       <br>
       <form>
-      <input type="text" id="model_fname" value="whole-deluge-63_train_S->S">
-      <!-- <input type="text" id="model_fname" value="model_3d"> -->
-      <button type="button" id="load_model" style="float: right;">Load Model</button>
+      <input type="text" id="graph_fname" value="data/youthful-surf-35_train_S-K_20l_mn1000">
+      <button type="button" id="load_graph" style="float: right;">Load Graph</button>
       </form>
       <br>
       <form>
-      <span class="textbox"><span style="color:hotpink">X: </span><input type="text" id="x_var_input"></span>
-      <span class="textbox"><span style="color:orange">Y: </span><input type="text" id="y_var_input"></span>
-      <span class="textbox"><span style="color:cadetblue">C: </span><input type="text" id="c_var_input"></span>
-      
+      <span class="textbox"><span style="color:hotpink">X: </span><input type="text" id="x_var_input" value="x"></span>
+      <span class="textbox"><span style="color:orange">Y: </span><input type="text" id="y_var_input" value="y"></span>
+      <span class="textbox"><span style="color:cadetblue">C: </span><input type="text" id="c_var_input" value="return"></span>
       <button type="button" id="plot">Plot</button>
       </form>
       <br>
@@ -44,6 +42,7 @@
         Samples = <input type="text" style="width:60px;" id="random_subsample"> / <span id="filtered_size"></span> / <span id="total_size"></span>
         <!-- | colours = <input type="checkbox" id="do_colour" checked=true> -->
         | nodes = <input type="checkbox" id="show_nodes" checked=true>
+        | node colours = <input type="checkbox" id="colour_nodes">
         | brush = <input type="checkbox" id='toggle_brush'> 
       </div>
       <button id='apply_brush_zoom'>Apply Brush/Zoom</button>
@@ -63,6 +62,17 @@
     <div class="column right">
       <div id="canvas"></div>
     </div>
+  </div>
+
+  <!-- xyc_selector tooltip -->
+  <div class="xyc_selector">
+    <button type="button" id="to_x"><span style="color:hotpink">X</span></button>
+    <button type="button" id="to_y"><span style="color:orange">Y</span></button>
+    <button type="button" id="to_c"><span style="color:cadetblue">C</span></button>
+  </div>
+  <!-- manual lim input tooltip -->
+  <div class="lim_input_div">
+    <input type="text" style="width:60px; border-radius: 5px;" id="lim_input">
   </div>
   
    <!-- Import JavaScript stuff -->

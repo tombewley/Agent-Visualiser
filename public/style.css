@@ -32,7 +32,6 @@ body {
     overflow-y: scroll;
     padding: 0.5%;
     background-color: black;
-    background-color: rgb(10, 10, 10)
   } 
   .right {
     width: 66%;
@@ -88,6 +87,10 @@ span.textbox input {
   pointer-events: none; /* NOTE: Samples can't take hover */
 }
 
+.cov:hover{
+  stroke-width: 5;
+}
+
 .node:hover{
     stroke-width: 5;
 }
@@ -108,7 +111,23 @@ div.tooltip {
   /* font-weight: bold;		 */
   background: rgb(50, 50, 50);	
   border-radius: 5px;			
-  pointer-events: none;			
+  pointer-events: none;		
+}
+
+div.xyc_selector {	
+  position: absolute;		
+  text-align: center;			
+  background: rgb(50, 50, 50);	
+  border-radius: 5px;			
+  /* pointer-events: none;			 */
+}
+
+div.lim_input_div {	
+  position: absolute;		
+  text-align: center;			
+  background: rgb(50, 50, 50);	
+  border-radius: 5px;			
+  /* pointer-events: none;			 */
 }
 
 /* For brush */

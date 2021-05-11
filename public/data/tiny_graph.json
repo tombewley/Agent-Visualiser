@@ -1,0 +1,14 @@
+{
+  "nodes": [
+    {"id": "A", "mean": [0,0,0,0,0]},
+    {"id": "B", "mean": [0,0,10,1,0]},
+    {"id": "C", "mean": [0,0,20,0,0]},
+    {"id": "D"}
+  ],
+  "links": [
+    {"source": "A", "target": "B"},
+    {"source": "C", "target": "B"},
+    {"source": "D", "target": "B"},
+    {"source": "C", "target": "A"}  
+  ]
+}

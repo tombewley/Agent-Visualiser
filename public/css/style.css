@@ -1,6 +1,5 @@
 body {
     background-color: black;
-    /* background-color: rgb(15, 15, 15); */
     /* font-family: "ETBembo", serif; */
     /* font-size: 12pt; */
     font-family: sans-serif;
@@ -31,7 +30,8 @@ body {
     /* height:100vh; */
     overflow-y: scroll;
     padding: 0.5%;
-    background-color: black;
+    /* background-color: black; */
+    background-color: rgb(5, 5, 5);
   } 
   .right {
     width: 66%;
@@ -46,7 +46,7 @@ form {
   display: flex;
 }
 button {
-  background-color: rgb(15, 15, 15);
+  background-color: rgb(30, 30, 30);
   border: none;
   color: white;
   text-align: center;
@@ -101,7 +101,7 @@ span.textbox input {
   font-size: inherit;
 }
 
-div.tooltip {	
+div.popup {	
   position: absolute;		
   text-align: center;			
   /* width: 60px;					 */

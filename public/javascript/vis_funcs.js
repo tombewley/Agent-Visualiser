@@ -12,9 +12,6 @@ function load_samples(){
         // Defaults
         random_subsample_size = 5000 // Number(samples_filtered.length)
         document.getElementById("random_subsample").value = random_subsample_size
-        // document.getElementById("x_var_input").value = var_names[0]
-        // document.getElementById("y_var_input").value = var_names[1]
-        // document.getElementById("c_var_input").value = var_names[2]
         status_readout.textContent += ` (${samples.length}, ${var_names.length}) dataset loaded.`  
         total_size_readout.textContent = samples.length
         make_pc_plot()
@@ -29,35 +26,42 @@ function load_graph(){
         if (var_names != null){ if (JSON.stringify(var_names) != JSON.stringify(d.var_names)){alert("var_names do not match!"); return}}
         else { var_names = d.var_names }
         nodes = []  
-        for (var i = 0; i < d.nodes.length; i++) {
+        terminal_num = d.nodes.length // NOTE: Assume terminal is the last node by index.
+        for (var i = 0; i < terminal_num; i++) {
             node = d.nodes[i]
-
-            if (node.id != "I" & node.id != "T") { // Ignore "I" and "T".
-                (["bb_max", "bb_min", "mean"]).forEach(function (attr){ 
-                    // Convert from Array to Object, using var_names as keys
-                    kv = [var_names, node[attr]]
-                    node[attr] = Object.fromEntries(kv[0].map((col, i) => kv.map(row => row[i])))
-                })
-                nodes.push(node)
-            }
+            node["id"] = i;
+            (["bb", "mean"]).forEach(function (attr){ 
+                // Convert from Array to Object, using var_names as keys
+                kv = [var_names, node[attr]]
+                node[attr] = Object.fromEntries(kv[0].map((col, i) => kv.map(row => row[i])))
+            })
+            nodes.push(node)
         }  
-        edges = []
+        edges_nonterminal = []
+        edges_terminal = []
         for (var i = 0; i < d.links.length; i++) {
             edge = d.links[i]
-            if (edge.source != "I" & edge.target != "T") { // Ignore edges to "T".
-                edges.push(edge)
+            if (i == 0) { num_graphs = edge.C.length }
+            if (edge.source != edge.target) { // NOTE: Ignore self-loops.
+                if (edge.target == terminal_num) {edges_terminal.push(edge)}
+                else {edges_nonterminal.push(edge)}
             }
+        }
+        // Calculate maximum edge count.
+        C_max = []
+        for (var i = 0; i < num_graphs; i++) {
+            C_max.push(Math.max(...edges_nonterminal.concat(edges_terminal).map(edge => edge.C[i])))
         }
         if (lims == null){ // If no samples previously provided, take lims from nodes themselves.
             lims = {}
             var_names.forEach(var_name => {
-                lims[var_name] = [Math.min(...nodes.map(node => node.bb_max[var_name][0])), Math.max(...nodes.map(node => node.bb_max[var_name][1]))]
+                lims[var_name] = [Math.min(...nodes.map(node => node.bb[var_name][0])), Math.max(...nodes.map(node => node.bb[var_name][1]))]
             })
             make_pc_plot()
             bb_or_zoom_to_lims(lims)
         }        
         else {
-            nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb_min, lims_filtered, true)})
+            nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb, lims_filtered, true)})
         }
         status_readout.textContent += ` ${nodes.length}-node graph loaded.`;  
     })
@@ -69,6 +73,9 @@ function make_pc_plot(){
     var handle_size = 4.5
 
     svg_pc.selectAll("*").remove() // Remove all existing content
+    pc_handle_pos = [[],[]]
+    pc_scales = []
+
     svg_pc.selectAll(".var_label").data(var_names).enter()
         .append("text") 
         .attr("class", "var_label")    
@@ -81,7 +88,7 @@ function make_pc_plot(){
         .on("click",function(event, d){
             last_clicked_var_name = d
             xyc_selector
-                .style("left", (event.pageX - 30) + "px")
+                .style("left", Math.max(event.pageX - 30, 0) + "px")
                 .style("top", (event.pageY - 28) + "px")
                 .transition().style("opacity", 1)
         })
@@ -143,8 +150,8 @@ function make_pc_plot(){
                     pc_handle_pos[idx][this_var_num][0] = x_constrained
                     pc_handle_path[idx].attr("d", d3.line()(pc_handle_pos[idx])) 
                     lim_new = pc_scales[this_var_num].invert(x_constrained)
-                    // Keep tooltip updated
-                    tooltip
+                    // Keep popup updated
+                    popup
                         .html(Number(lim_new.toPrecision(3)))
                         .style("left", (event.sourceEvent.pageX - 30) + "px")
                 })
@@ -162,15 +169,15 @@ function make_pc_plot(){
                             filtered_size_readout.textContent = samples_filtered.length
                             samples_filtered_subsampled = random_subsample(samples_filtered, random_subsample_size)
                         }
-                        if (nodes != null) {nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb_min, lims_filtered, true)})}
-                        // Hide tooltip
-                        tooltip.transition().style("opacity", 0);
+                        if (nodes != null) {nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb, lims_filtered, true)})}
+                        // Hide popup
+                        popup.transition().style("opacity", 0);
                     }
                 })
             )
             .on("click", function(event, d) {
                 if (event.defaultPrevented) return; // Triggers if dragged
-                tooltip.style("opacity", 0)
+                popup.style("opacity", 0)
                 last_clicked_var_name = [d, idx]
                 lim_input_div
                     .style("left", (event.pageX - 30) + "px")
@@ -189,10 +196,11 @@ function make_pc_plot(){
                 }
                 else {
                     if (event.detail != 2) {
-                        // Case where a target value has been passed into the event (by lim_input)
-                        if (idx == 0) {lims_filtered[d][idx] = Math.max(Number(event.detail), lims[d][idx])} // Constrain within limits
-                        else {lims_filtered[d][idx] = Math.min(Number(event.detail), lims[d][idx])}    
-                        pc_handle_pos[idx][this_var_num][0] = pc_scales[this_var_num](lims_filtered[d][idx])
+                        // Case where a target value has been passed into the event by lim_input. NOTE: This is allowed to extend beyond the global data lims!
+                        lims_filtered[d][idx] = Number(event.detail)
+                        if (idx == 0) {pc_handle_pos[idx][this_var_num][0] = pc_scales[this_var_num](Math.max(lims_filtered[d][idx], lims[d][idx]))} // Constrain within limits
+                        else {pc_handle_pos[idx][this_var_num][0] = pc_scales[this_var_num](Math.min(lims_filtered[d][idx], lims[d][idx]))}    
+                        console.log(pc_handle_pos[idx][this_var_num][0])
                         this_d3.transition().attr("cx", pc_handle_pos[idx][this_var_num][0])
                         pc_handle_path[idx].transition().attr("d", d3.line()(pc_handle_pos[idx]))
                     }
@@ -209,25 +217,25 @@ function make_pc_plot(){
                         filtered_size_readout.textContent = samples_filtered.length
                         samples_filtered_subsampled = random_subsample(samples_filtered, random_subsample_size)
                     }
-                    if (nodes != null) {nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb_min, lims_filtered, true)})}
+                    if (nodes != null) {nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb, lims_filtered, true)})}
                 }
             })        
             .on("mouseover",function(event){
                 if (dragging_handle == false) {
                     this_d3 = d3.select(this)       
-                    show_tooltip(Number(lims_filtered[var_names[this_d3.attr("data-var-num")]][this_d3.attr("data-min-or-max")].toPrecision(3)))
+                    show_popup(event.pageX - 30, event.pageY - 28, Number(lims_filtered[var_names[this_d3.attr("data-var-num")]][this_d3.attr("data-min-or-max")].toPrecision(3)))
                 }
             })
             .on("mouseout",function(){
-                if (dragging_handle == false) {tooltip.transition().style("opacity", 0)};
+                if (dragging_handle == false) {popup.transition().style("opacity", 0)};
             })  
     }
 }  
 
-function show_tooltip(html){
-    tooltip.html(html)
-        .style("left", (event.pageX - 30) + "px")
-        .style("top", (event.pageY - 28) + "px")
+function show_popup(x, y, html){
+    popup.html(html)
+        .style("left", x + "px")
+        .style("top", y + "px")
         .transition().style("opacity", 1)
 }
 
@@ -242,7 +250,7 @@ function bb_or_zoom_to_lims(bb){
         } 
         else {
             if (samples != null) {samples_filtered = samples.filter(function (x){return x_in_l(x, lims_filtered, false)})}
-            if (nodes != null) {nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb_min, lims_filtered, true)})}
+            if (nodes != null) {nodes_filtered = nodes.filter(function (x){return x_in_l(x.bb, lims_filtered, true)})}
         }
     } 
     else {
@@ -252,7 +260,7 @@ function bb_or_zoom_to_lims(bb){
         [x_var, y_var].forEach(function(var_name){lims_to_handles(var_name)}) 
         // Only need to filter the current subset, because zooming can only ever reduce.
         if (samples != null) {samples_filtered = samples_filtered.filter(function (x){return x_in_l(x, lims_filtered, false)})}
-        if (nodes != null) {nodes_filtered = nodes_filtered.filter(function (x){return x_in_l(x.bb_min, lims_filtered, true)})}
+        if (nodes != null) {nodes_filtered = nodes_filtered.filter(function (x){return x_in_l(x.bb, lims_filtered, true)})}
     }    
     if (samples != null) {
         filtered_size_readout.textContent = samples_filtered.length
@@ -280,8 +288,9 @@ function apply_brush(){
 function subsample_size_from_input(){
     inp = d3.select("#"+this.id)  
     if (this.value != inp.attr("data-prev-val")){ // Check if edit made
-        if (this.value == ""){ // If left empty, reset to global
-            random_subsample_size = Number(samples_filtered.length)
+        if (this.value == ""){ // If left empty, reset...
+            // random_subsample_size = Number(samples_filtered.length) // ...to total number
+            random_subsample_size = 0 // ...to zero
             this.value = random_subsample_size
         }
         else { // Otherwise, use the value given
@@ -317,10 +326,11 @@ function x_in_l(x, l, x_is_array){
     return true
 } 
 
-function update_x_y_c(){
+function update_x_y_c_g(){
     x_var = document.getElementById("x_var_input").value
     y_var = document.getElementById("y_var_input").value
     c_var = document.getElementById("c_var_input").value
+    current_graph = Number(document.getElementById("graph_num_input").value)
     // Highlight variables in pc plot
     svg_pc.selectAll(".var_label").style("fill", "white")
     svg_pc.selectAll(".pc_handle_min").style("fill", "white")
@@ -391,20 +401,30 @@ function confidence_ellipse(node) {
     return {"node":node, "cx":cx, "cy":cy, "rx":rx, "ry":ry, "rot":rot}
 }
 
-function midpoint_arc(x1, y1, x2, y2) {
-    dx = (x2-x1)
-    dy = (y2-y1)
-    a = Math.atan2(dy, dx)    
+function midpoint_arc(edge) {
+    x1 = x(nodes[edge.source].mean[x_var]);
+    y1 = y(nodes[edge.source].mean[y_var]);
+    if (edge.target == terminal_num) { // Special treatment for terminal edges.
+        x2 = terminal_loc[0].x
+        y2 = terminal_loc[0].y
+    }
+    else {
+        x2 = x(nodes[edge.target].mean[x_var]);
+        y2 = y(nodes[edge.target].mean[y_var]);
+    }
+    dx = (x2-x1);
+    dy = (y2-y1);
+    a = Math.atan2(dy, dx);    
     r = (dx**2 + dy**2) ** 0.5; // Set arc radius = distance between endpoints
-    offset = r * (1 - (3**0.5)/2) // Basic trig
+    offset = r * (1 - (3**0.5)/2); // Basic trig
     xm = ((x1 + x2) / 2) - offset * Math.sin(a);
     ym = ((y1 + y2) / 2) + offset * Math.cos(a);
     return `M ${x1} ${y1} A ${r} ${r} 0 0 0 ${xm} ${ym} A ${r} ${r} 0 0 0 ${x2} ${y2}`
 }
 
 function plot(){
-    update_x_y_c() 
-    // Recompute lims and redraw axes
+    update_x_y_c_g() 
+    // Recompute scales and redraw axes
     if (brush_area != null && brush_selection != null) {apply_brush()} // If brush selection is active, use that for the lims
     else {
         // Otherwise use the extent of the current subset
@@ -426,6 +446,8 @@ function plot(){
         if (document.getElementById("colour_nodes").checked == false) {function node_colour(){return "none"}}
         else {node_colour = sample_colour}
     }
+    edge_alpha_scale.domain([0, C_max[current_graph]])
+
     var t = svg.transition().duration(animation_duration)
     svg.select(".x_axis").transition(t).attr("opacity", "1").call(d3.axisBottom(x))
     svg.select(".x_label").text(x_var)
@@ -441,7 +463,7 @@ function plot(){
     rad = size_slider.value() // Radius from slider
     diam = 2 * rad
 
-    // Show node projections as rectangles
+    // Show projected node bounding boxes as rectangles
     if (nodes != null) {
         status_readout.textContent += ` | ${nodes_filtered.length} nodes`
         rects = node_canvas.selectAll(".node").data(nodes_filtered, function(d) {return d.id})  
@@ -449,32 +471,32 @@ function plot(){
         else {
             w.domain([0, x_lims[1]-x_lims[0]]); h.domain([0, y_lims[1]-y_lims[0]])
             rects.transition(t) // This is executed for each existing element in order
-                .attr("x", function(d){return x(d.bb_min[x_var][0])})
+                .attr("x", function(d){return x(d.bb[x_var][0])})
                 .attr("y", function(d){
-                    if (y_var != "") {return y(d.bb_min[y_var][1])} else {return 0}})
-                .attr("width", function(d){return w(d.bb_min[x_var][1] - d.bb_min[x_var][0])}) 
+                    if (y_var != "") {return y(d.bb[y_var][1])} else {return 0}})
+                .attr("width", function(d){return w(d.bb[x_var][1] - d.bb[x_var][0])}) 
                 .attr("height", function(d){
-                    if (y_var != "") {return h(d.bb_min[y_var][1] - d.bb_min[y_var][0])}
+                    if (y_var != "") {return h(d.bb[y_var][1] - d.bb[y_var][0])}
                     else {return height}
                 })
                 .attr("fill", function(d){return node_colour(c(d.mean[c_var]))});
             rects.enter() // This is triggered when there are more data instances than HTML elements
                 .append("rect")
                 .attr("class", "node")
-                .attr("x", function(d){return x(d.bb_min[x_var][0])})
+                .attr("x", function(d){return x(d.bb[x_var][0])})
                 .attr("y", function(d){
-                    if (y_var != "") {return y(d.bb_min[y_var][1])} else {return 0}})
-                .attr("width", function(d){return w(d.bb_min[x_var][1] - d.bb_min[x_var][0])}) 
+                    if (y_var != "") {return y(d.bb[y_var][1])} else {return 0}})
+                .attr("width", function(d){return w(d.bb[x_var][1] - d.bb[x_var][0])}) 
                 .attr("height", function(d){
-                    if (y_var != "") {return h(d.bb_min[y_var][1] - d.bb_min[y_var][0])}
+                    if (y_var != "") {return h(d.bb[y_var][1] - d.bb[y_var][0])}
                     else {return height}
                 })
                 .attr("fill", function(d){return node_colour(c(d.mean[c_var]))})
                 .attr("stroke", "white")
                 .on("click", function(event, d) {
-                    show_tooltip(`Node ${d.id}<br>${d.num_samples} samples`)
+                    show_popup(event.pageX - 30, event.pageY - 28, `Node ${d.id}<br>${d.num_samples} samples`)
                 })
-                .on("dblclick", function(event, d){bb_or_zoom_to_lims(d.bb_min); tooltip.transition().style("opacity", 0); plot()}) // Click to adopt lims
+                .on("dblclick", function(event, d){bb_or_zoom_to_lims(d.bb); popup.transition().style("opacity", 0); plot()}) // Click to adopt lims
                 .attr("opacity", 0)
                 .transition(t)
                 .style("opacity", 1);
@@ -484,33 +506,23 @@ function plot(){
         }
 
         // Show edges as arcs.
+        var edges = edges_nonterminal.concat(edges_terminal);
         edge_arcs = node_canvas.selectAll(".edge").data(edges) // , function (d) {return (d.source, d.target)})
         edge_arcs.transition(t)
-            .attr("d", function(d){
-                x1 = x(nodes[d.source].mean[x_var])
-                y1 = y(nodes[d.source].mean[y_var])
-                x2 = x(nodes[d.target].mean[x_var])
-                y2 = y(nodes[d.target].mean[y_var])
-                return midpoint_arc(x1, y1, x2, y2)
-            })  
+            .attr("d", d => midpoint_arc(d))
+            .attr("opacity", d => edge_alpha_scale(d.C[current_graph]))
         edge_arcs.enter()
             .append("path")
             .attr("class", "edge")
-            .attr("d", function(d){
-                x1 = x(nodes[d.source].mean[x_var])
-                y1 = y(nodes[d.source].mean[y_var])
-                x2 = x(nodes[d.target].mean[x_var])
-                y2 = y(nodes[d.target].mean[y_var])
-                return midpoint_arc(x1, y1, x2, y2)
-            })  
+            .attr("d", d => midpoint_arc(d))  
             .attr("fill", "none")
             .attr("stroke", "white")  
             .attr("stroke-width", 2)  
             .on("mouseover", function () {d3.select(this).transition().attr("opacity", 1).attr("stroke-width", 3)})
-            .on("mouseout", function () {d3.select(this).transition().attr("opacity", d => d.alpha).attr("stroke-width", 2)})
+            .on("mouseout", function () {d3.select(this).transition().attr("opacity", d => edge_alpha_scale(d.C[current_graph])).attr("stroke-width", 2)})
             .attr("opacity", 0)
             .transition(t)
-            .attr("opacity", d => d.alpha)
+            .attr("opacity", d => edge_alpha_scale(d.C[current_graph]))
             .attr("marker-mid", "url(#marker_arrow)")
         edge_arcs.exit()
             .transition(t).style("opacity", 0)
@@ -539,16 +551,39 @@ function plot(){
             .attr("x", function(d){return x(d.mean[x_var]) - rad_mu})
             .attr("y", function(d){if (y_var != "") {return y(d.mean[y_var]) - rad_mu}})
             .attr("width", diam_mu)
-            .attr("height", function(){
+            .attr("height", function (){
                 if (y_var != "") {return diam_mu}
                 else {return height}
             })
             .attr("rx", rad_mu).attr("ry", rad_mu)
             .attr("fill", function(d){return sample_colour(c(d.mean[c_var]))})
-            .on("mouseover", function () {d3.select(this).transition().attr("width", 200).attr("height", 200)})
-            .on("mouseout", function () {d3.select(this).transition().attr("width", diam_mu).attr("height", diam_mu)})
-            .on("click", function(event, d) {
-                show_tooltip(`Node ${d.id}<br>${d.num_samples} samples`)
+            .on("mouseover", function (event, d) {
+                if (this.active != true) {
+                    d3.select(this).raise().transition().attr("width", 100+diam_mu).attr("height", 11.5+diam_mu)
+                
+                    // d3.select(this).raise()
+                    x_px = x(d.mean[x_var])
+                    y_px = y(d.mean[y_var])
+
+                    // node_canvas.append("rect")
+                    //     .attr("x", x_px)
+                    //     .attr("y", y_px)
+                    //     .attr("width", 200)
+                    //     .attr("height", 200)
+                    //     .attr("fill", "gray")
+
+                    node_canvas.append("text")
+                        .attr("id", "text_popup")
+                        .attr("pointer-events", "none")
+                        .text(`Node ${d.id}`)
+                        .attr("alignment-baseline", "hanging")
+                        .attr("transform", `translate(${x_px},${y_px})`)
+                
+                
+                
+                }})
+            .on("mouseout", function () {if (this.active != true) {d3.select(this).transition().attr("width", diam_mu).attr("height", diam_mu); node_canvas.select("#text_popup").remove()}})
+            .on("click", function () {if (this.active != true) {this.active = true} else {this.active = false}
             })
             .attr("opacity", 0)
             .transition(t)
@@ -556,7 +591,21 @@ function plot(){
         means.exit()
             .transition(t).style("opacity", 0)
             .remove();
-    
+
+        // Show terminal node as scatter point.
+        terminal = node_canvas.selectAll(".terminal").data(terminal_loc)
+        terminal.transition(t).attr("cx", d => d.x).attr("cy", d => d.y) // .attr("r", rad_mu)
+        terminal.enter()
+            .append("circle").attr("class", "terminal")
+            .attr("cx", d => d.x).attr("cy", d => d.y).attr("r", 10) // .attr("r", rad_mu)
+            .style("fill", "black").attr("stroke", "white").attr("stroke-width", 2)  
+            .on("mouseover", function (d) {d3.select(this).style("cursor", "move").transition().style("fill", "white")})
+            .on("mouseout", function (d) {d3.select(this).transition().style("fill", "black")})
+            .call(d3.drag()
+                  .on("drag", function (event, d) {d3.select(this).attr("cx", d.x = event.x).attr("cy", d.y = event.y)})
+                  .on("end", function () {plot()})
+                  );
+
     //     // Show node covariances as confidence ellipses
     //     el = nodes_filtered.map(node => {return confidence_ellipse(node)})
     //     covs = node_canvas.selectAll(".cov").data(el, function(d) {return d.node.id})
@@ -579,9 +628,9 @@ function plot(){
     //         .style("transform", d => {return `rotate(${d.rot}rad)`})
     //         .style("transform-origin", d => {return `${d.cx}px ${d.cy}px`})
     //         .on("click", function(event, d) {
-    //             show_tooltip(`Node ${d.node.id}<br>${d.node.num_samples} samples`)
+    //             show_popup(event.pageX - 30, event.pageY - 28, `Node ${d.node.id}<br>${d.node.num_samples} samples`)
     //         })
-    //         .on("dblclick", function(event, d){bb_or_zoom_to_lims(d.node.bb_min); tooltip.transition().style("opacity", 0); plot()}) // Click to adopt lims
+    //         .on("dblclick", function(event, d){bb_or_zoom_to_lims(d.node.bb); popup.transition().style("opacity", 0); plot()}) // Click to adopt lims
     //         .attr("opacity", 0)
     //         .transition(t)
     //         .style("opacity", 1);   

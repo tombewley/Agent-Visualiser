@@ -1,4 +1,4 @@
-// Display variables
+// Global display variables
 var total_width = (window.innerWidth * 0.66) - 13
 var total_height = window.innerHeight - 20
 var margin = {top: 5, right: 50, bottom: 48, left: 70}
@@ -9,12 +9,14 @@ var y_var_colour = "orange"
 var c_var_colour = "cadetblue"
 var cmap = d3.interpolateRdYlBu
 var cbar_height = height-15, cbar_width = 10, cbar_resolution = 100, cbar_segment = cbar_height/cbar_resolution
-var animation_duration = 1000
+var animation_duration = 500
+var terminal_loc = [{x: 50, y: 50}] // Initial location of terminal node if displayed
 
-// Data variables
+// Global data variables
 var var_names = null
 var samples = null
 var nodes = null
+var terminal_num = null
 var edges = null
 var lims = null
 var samples_filtered = null
@@ -26,9 +28,12 @@ var x_lims = null
 var y_var = null
 var y_lims = null
 var c_var = null
-var pc_handle_pos = [[],[]]
+var num_graphs = null
+var current_graph = null
+var C_max = null
+var pc_handle_pos = null
 var pc_handle_path = [null, null]
-var pc_scales = []
+var pc_scales = null
 var last_clicked_var_name = null
 var brush_selection = null
 
@@ -64,6 +69,7 @@ var y = d3.scaleLinear().range([height, 0])
 var w = d3.scaleLinear().range([0, width])
 var h = d3.scaleLinear().range([0, height])
 var c = d3.scaleLinear().range([0, 1])
+var edge_alpha_scale = d3.scaleLinear().range([0, 1])
 var cbar = d3.scaleLinear().range([cbar_height, 0])
 
 // Define arrow head
@@ -134,9 +140,9 @@ var brush = d3.brush()
     .on("end", function () {brush_selection = d3.brushSelection(this)})
 var brush_area = null // Don't create by default
 
-// Create general-purpose tooltip
-var tooltip = d3.select("body").append("div").attr("class", "tooltip").style("opacity", 0)
-cbar_group.on("click", function() {tooltip.transition().style("opacity", 0)}) // Click to hide
+// Create general-purpose popup
+var popup = d3.select("body").append("div").attr("class", "popup").style("opacity", 0)
+cbar_group.on("click", function() {popup.transition().style("opacity", 0)}) // Click to hide
 
 // Create xyc selector tooltip
 var xyc_selector = d3.select(".xyc_selector").style("opacity", 0)
@@ -249,5 +255,12 @@ function keypress(event) {
             y_in = document.getElementById("y_var_input"); y_var = y_in.value
             c_in = document.getElementById("c_var_input"); c_var = c_in.value
             y_in.value = c_var; c_in.value = y_var; plot(); break;
+        case 45:
+            g_in = document.getElementById("graph_num_input"); 
+            g_in.value = g_in.value - 1; plot(); break;
+        case 61:
+            g_in = document.getElementById("graph_num_input"); 
+            g_in.value = Number(g_in.value) + 1; plot(); break;
+
     }
 }
